@@ -1,0 +1,92 @@
+﻿@model MealBuilder.ViewModels.RecipeIngredientsVm
+@{
+    ViewData["Title"] = $"Manage Ingredients — {Model.RecipeTitle}";
+}
+
+<h2>@ViewData["Title"]</h2>
+<hr />
+
+<div class="row">
+    <div class="col-lg-7">
+        <h4>Current ingredients</h4>
+        @if (!Model.Items.Any())
+        {
+            <p class="text-muted">No ingredients yet.</p>
+        }
+        else
+        {
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Ingredient</th>
+                        <th class="text-end">Quantity</th>
+                        <th>Unit</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var x in Model.Items)
+                    {
+                        <tr>
+                            <td>@x.IngredientName</td>
+                            <td class="text-end">@x.Quantity</td>
+                            <td>@x.Unit</td>
+                            <td class="text-end">
+                                <form asp-action="RemoveIngredient" method="post" class="d-inline">
+                                    <input type="hidden" name="recipeId" value="@Model.RecipeId" />
+                                    <input type="hidden" name="ingredientId" value="@x.IngredientId" />
+                                    <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                                    @Html.AntiForgeryToken()
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        <a asp-action="Details" asp-route-id="@Model.RecipeId" class="btn btn-link">← Back to recipe</a>
+    </div>
+
+    <div class="col-lg-5">
+        <h4>Add or update ingredient</h4>
+        <form asp-action="AddIngredient" method="post" class="card card-body">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="Add.RecipeId" />
+
+            <div class="mb-3">
+                <label asp-for="Add.IngredientId" class="form-label">Ingredient</label>
+                <select asp-for="Add.IngredientId" class="form-select"
+                        asp-items="Model.IngredientOptions">
+                    <option value="">-- choose --</option>
+                </select>
+                <span asp-validation-for="Add.IngredientId" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Add.Quantity" class="form-label">Quantity</label>
+                <input asp-for="Add.Quantity" class="form-control" type="number" step="0.01" inputmode="decimal" />
+                <span asp-validation-for="Add.Quantity" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="Add.Unit" class="form-label">Unit</label>
+                <select asp-for="Add.Unit" class="form-select"
+                        asp-items="Html.GetEnumSelectList<MealBuilder.Models.Unit>()"></select>
+                <span asp-validation-for="Add.Unit" class="text-danger"></span>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="text-danger mt-2">
+                @Html.ValidationSummary()
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

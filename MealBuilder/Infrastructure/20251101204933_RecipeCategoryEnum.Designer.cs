@@ -3,6 +3,7 @@ using System;
 using MealBuilder.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MealBuilder.Infrastructure
 {
     [DbContext(typeof(MealBuilderDbContext))]
-    partial class MealBuilderDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251101204933_RecipeCategoryEnum")]
+    partial class RecipeCategoryEnum
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -86,7 +89,9 @@ namespace MealBuilder.Infrastructure
 
                     b.HasIndex("RecipeId");
 
-                    b.HasIndex("MealPlanId", "Day", "MealType")
+                    b.HasIndex("MealPlanId", "Day", "MealType");
+
+                    b.HasIndex("MealPlanId", "Day", "MealType", "RecipeId")
                         .IsUnique();
 
                     b.ToTable("MealPlanRecipes");

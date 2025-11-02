@@ -1,4 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace MealBuilder.Models;
 public enum MealType
@@ -13,9 +16,11 @@ public class MealPlanRecipe
 {
     public int Id { get; set; }
     public int MealPlanId { get; set; }
+    [ValidateNever][BindNever][JsonIgnore]
     public MealPlan MealPlan { get; set; } = default!;
 
     public int RecipeId { get; set; }
+    [ValidateNever][BindNever][JsonIgnore]
     public Recipe Recipe { get; set; } = default!;
 
     [Required]

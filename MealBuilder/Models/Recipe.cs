@@ -1,7 +1,14 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
 namespace MealBuilder.Models;
-
+public enum MealCategory
+{
+    Breakfast,
+    Dinner,
+    Lunch,
+    Dessert,
+    Snack
+}
 public class Recipe
 {
     public int Id { get; set; }
@@ -12,8 +19,8 @@ public class Recipe
     [StringLength(2000)]
     public string? Description { get; set; }
 
-    [StringLength(60)]
-    public string? Category { get; set; }
+    [Required]
+    public MealCategory Category { get; set; }
 
     [Range(0, 100000)]
     public int? Calories { get; set; }

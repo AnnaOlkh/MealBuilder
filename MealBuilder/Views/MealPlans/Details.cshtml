@@ -1,0 +1,121 @@
+﻿@model MealBuilder.ViewModels.MealPlanDetailsVm
+@{
+    ViewData["Title"] = $"Meal Plan — {Model.Name}";
+    var mealTypes = Enum.GetValues<MealBuilder.Models.MealType>();
+}
+
+<h2>@ViewData["Title"]</h2>
+<hr />
+
+<div class="mb-3">
+    <a class="btn btn-outline-secondary" asp-action="Index">← Back to list</a>
+</div>
+
+<table class="table table-bordered align-middle">
+    <thead class="table-light">
+        <tr>
+            <th style="width:140px">Day</th>
+            @foreach (MealBuilder.Models.MealType mt in mealTypes)
+            {
+                <th>@mt</th>
+            }
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (DayOfWeek day in Enum.GetValues(typeof(DayOfWeek)))
+        {
+            <tr>
+                <th>@day</th>
+                @foreach (MealBuilder.Models.MealType mt in mealTypes)
+                {
+                    var slot = Model.Slots.First(s => s.Day == day && s.MealType == mt);
+                    <td>
+                        @if (slot.MealPlanRecipeId is null)
+                        {
+                            <form asp-action="AddItem" method="post" class="d-flex flex-column gap-2">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="Edit.MealPlanId" value="@Model.MealPlanId" />
+                                <input type="hidden" name="Edit.Day" value="@day" />
+                                <input type="hidden" name="Edit.MealType" value="@mt" />
+
+                                <div class="d-flex gap-2">
+                                    <select name="Edit.RecipeId" class="form-select form-select-sm" required style="min-width: 220px;">
+                                        <option value="">— choose recipe —</option>
+                                        @foreach (var opt in Model.RecipeOptions)
+                                        {
+                                            <option value="@opt.Value">@opt.Text</option>
+                                        }
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                                </div>
+
+                                <div>
+                                    <label class="form-label small mb-1">My notes</label>
+                                    <textarea name="Edit.Notes"
+                                              class="form-control form-control-sm"
+                                              rows="2" maxlength="300"
+                                              placeholder="Leave your notes..."></textarea>
+                                </div>
+                            </form>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column gap-1">
+                                <div><strong>@slot.RecipeTitle</strong></div>
+                                @if (!string.IsNullOrWhiteSpace(slot.Notes))
+                                {
+                                    <div class="small text-muted border rounded p-2 mb-2">@slot.Notes</div>
+                                }
+                                else
+                                {
+                                    <div class="small text-muted fst-italic mb-2">No notes yet</div>
+                                }
+
+                                <p>
+                                    <a class="btn btn-sm btn-outline-secondary"
+                                       data-bs-toggle="collapse"
+                                       href="#editNotes-@slot.MealPlanRecipeId"
+                                       role="button"
+                                       aria-expanded="false"
+                                       aria-controls="editNotes-@slot.MealPlanRecipeId">
+                                        Edit notes
+                                    </a>
+                                </p>
+
+                                <div class="collapse mb-2" id="editNotes-@slot.MealPlanRecipeId">
+                                    <div class="card card-body p-2 bg-light">
+                                        <form asp-action="UpdateNotes" method="post" class="d-flex flex-column gap-2">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="MealPlanId" value="@Model.MealPlanId" />
+                                            <input type="hidden" name="MealPlanRecipeId" value="@slot.MealPlanRecipeId" />
+
+                                            <textarea name="Notes"
+                                                      class="form-control form-control-sm"
+                                                      rows="3"
+                                                      maxlength="300"
+                                                      placeholder="Edit notes...">@slot.Notes</textarea>
+
+                                            <div class="d-flex justify-content-between">
+                                                <button class="btn btn-sm btn-primary" type="submit">Save</button>
+                                                <button class="btn btn-sm btn-outline-secondary"
+                                                        type="button"
+                                                        data-bs-toggle="collapse"
+                                                        data-bs-target="#editNotes-@slot.MealPlanRecipeId">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

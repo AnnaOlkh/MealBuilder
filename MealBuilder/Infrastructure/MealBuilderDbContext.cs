@@ -16,6 +16,11 @@ public class MealBuilderDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<Recipe>()
+            .Property(r => r.Category)
+            .HasConversion<string>()
+            .HasMaxLength(32);
+
         modelBuilder.Entity<RecipeIngredient>()
             .HasKey(ri => new { ri.RecipeId, ri.IngredientId });
 
@@ -32,16 +37,8 @@ public class MealBuilderDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<MealPlanRecipe>()
-        .HasIndex(mpr => new {
-            mpr.MealPlanId,
-            mpr.Day,
-            mpr.MealType,
-            mpr.RecipeId
-        })
-        .IsUnique();
-
-        modelBuilder.Entity<MealPlanRecipe>()
-        .HasIndex(m => new { m.MealPlanId, m.Day, m.MealType });
+            .HasIndex(m => new { m.MealPlanId, m.Day, m.MealType })
+            .IsUnique();
 
         modelBuilder.Entity<MealPlanRecipe>()
             .HasOne(mpr => mpr.MealPlan)
