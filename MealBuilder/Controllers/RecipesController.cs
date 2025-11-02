@@ -240,5 +240,36 @@ namespace MealBuilder.Controllers
         {
             return _context.Recipes.Any(e => e.Id == id);
         }
+        public async Task<IActionResult> Landing(int id)
+        {
+            var recipe = await _context.Recipes
+                .Include(r => r.RecipeIngredients)
+                    .ThenInclude(ri => ri.Ingredient)
+                .FirstOrDefaultAsync(r => r.Id == id);
+
+            if (recipe == null) return NotFound();
+
+            var vm = new RecipeLandingVm
+            {
+                RecipeId = recipe.Id,
+                Title = recipe.Title,
+                Description = recipe.Description,
+                Category = recipe.Category,
+                Calories = recipe.Calories,
+                ImageUrl = recipe.ImageUrl,
+                Ingredients = recipe.RecipeIngredients
+                    .OrderBy(ri => ri.Ingredient.Name)
+                    .Select(ri => new RecipeLandingVm.IngredientRow
+                    {
+                        Name = ri.Ingredient.Name,
+                        Quantity = ri.Quantity,
+                        Unit = ri.Unit
+                    })
+                    .ToList()
+            };
+            vm.UsedInMealPlansCount = await _context.MealPlanRecipes
+                .CountAsync(m => m.RecipeId == recipe.Id);
+            return View(vm);
+        }
     }
 }
