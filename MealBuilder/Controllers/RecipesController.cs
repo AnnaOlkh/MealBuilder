@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using MealBuilder.Infrastructure;
 using MealBuilder.Models;
+using MealBuilder.Services;
 using MealBuilder.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,9 +16,11 @@ namespace MealBuilder.Controllers
     [Authorize]
     public class RecipesController : AppControllerBase
     {
-        public RecipesController(MealBuilderDbContext context)
+        private readonly IImageStorage _imageStorage;
+        public RecipesController(MealBuilderDbContext context, IImageStorage imageStorage)
             : base(context)
         {
+            _imageStorage = imageStorage;
         }
 
         public async Task<IActionResult> ManageIngredients(int id)
@@ -160,16 +163,21 @@ namespace MealBuilder.Controllers
         // POST: Recipes/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Id,Title,Description,Category,Calories,ImageUrl")] Recipe recipe)
+        public async Task<IActionResult> Create([Bind("Title,Description,Category,Calories,ImageUrl")] Recipe recipe,
+            IFormFile? imageFile, CancellationToken ct)
         {
+            var userId = await GetCurrentAppUserIdAsync();
+            recipe.AppUserId = userId;
+            ModelState.Remove(nameof(Recipe.AppUserId));
             if (!ModelState.IsValid)
             {
                 return View(recipe);
             }
-
-            var userId = await GetCurrentAppUserIdAsync();
-            recipe.AppUserId = userId;
-
+            if (imageFile is { Length: > 0 })
+            {
+                var imageUrl = await _imageStorage.UploadAsync(imageFile, ct);
+                recipe.ImageUrl = imageUrl;
+            }
             _context.Add(recipe);
             await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));
@@ -193,10 +201,11 @@ namespace MealBuilder.Controllers
         // POST: Recipes/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("Id,Title,Description,Category,Calories,ImageUrl")] Recipe recipe)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Title,Description,Category,Calories")] Recipe recipe,
+            IFormFile? imageFile, CancellationToken ct)
         {
             if (id != recipe.Id) return NotFound();
-
+            ModelState.Remove(nameof(Recipe.AppUserId));
             if (!ModelState.IsValid)
             {
                 return View(recipe);
@@ -214,7 +223,11 @@ namespace MealBuilder.Controllers
             existing.Category = recipe.Category;
             existing.Calories = recipe.Calories;
             existing.ImageUrl = recipe.ImageUrl;
-
+            if (imageFile is { Length: > 0 })
+            {
+                var imageUrl = await _imageStorage.UploadAsync(imageFile, ct);
+                existing.ImageUrl = imageUrl;
+            }
             try
             {
                 await _context.SaveChangesAsync();

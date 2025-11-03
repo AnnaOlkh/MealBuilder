@@ -8,7 +8,8 @@ namespace MealBuilder.Models;
 public enum Unit
 {
     Gram,
-    Milliliter
+    Milliliter,
+    Piece
 }
 public class RecipeIngredient
 {

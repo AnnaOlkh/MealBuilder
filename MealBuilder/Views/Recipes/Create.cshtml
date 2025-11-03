@@ -3,14 +3,17 @@
 @{
     ViewData["Title"] = "Create";
 }
-
+@if (ViewBag.DebugErrors != null)
+{
+    <pre>@System.Text.Json.JsonSerializer.Serialize(ViewBag.DebugErrors)</pre>
+}
 <h1>Create</h1>
 
 <h4>Recipe</h4>
 <hr />
 <div class="row">
     <div class="col-md-4">
-        <form asp-action="Create">
+        <form asp-action="Create" enctype="multipart/form-data">
             <div asp-validation-summary="ModelOnly" class="text-danger"></div>
             <div class="form-group">
                 <label asp-for="Title" class="control-label"></label>
@@ -36,11 +39,10 @@
                 <span asp-validation-for="Calories" class="text-danger"></span>
             </div>
             <div class="form-group">
-                <label asp-for="ImageUrl" class="control-label"></label>
-                <input asp-for="ImageUrl" class="form-control" />
-                <span asp-validation-for="ImageUrl" class="text-danger"></span>
+                <label for="imageFile" class="control-label">Recipe image</label>
+                <input type="file" name="imageFile" class="form-control" />
             </div>
-            <div class="form-group">
+            <div class="form-group mt-3">
                 <input type="submit" value="Create" class="btn btn-primary" />
             </div>
         </form>

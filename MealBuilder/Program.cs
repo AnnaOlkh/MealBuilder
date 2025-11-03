@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Telegram.Bot;
 using MealBuilder.Models;
 using System.Security.Claims;
+using MealBuilder.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,7 +29,7 @@ builder.Services.AddSwaggerGen(o =>
 {
     o.SwaggerDoc("v1", new() { Title = "MealBuilder API", Version = "v1" });
 });
-
+builder.Services.AddSingleton<IImageStorage, CloudinaryImageStorage>();
 builder.Services.AddSingleton<ITelegramBotClient>(_ =>
 {
     var token = builder.Configuration["Telegram:BotToken"]
@@ -96,7 +97,6 @@ builder.Services
             await db.SaveChangesAsync();
         };
     });
-
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
