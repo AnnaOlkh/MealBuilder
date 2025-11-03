@@ -1,14 +1,52 @@
 ﻿@model MealBuilder.ViewModels.MealPlanDetailsVm
+@using System.Text.Json
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 @{
     ViewData["Title"] = $"Meal Plan — {Model.Name}";
     var mealTypes = Enum.GetValues<MealBuilder.Models.MealType>();
-}
+    var days = Enum.GetValues(typeof(DayOfWeek)).Cast<DayOfWeek>().ToArray();
+    var labelsDays = days.Select(d => d.ToString()).ToArray();
 
+    var caloriesPerDay = days
+        .Select(d => Model.Slots
+            .Where(s => s.Day == d && s.MealPlanRecipeId != null)
+            .Sum(s => s.Calories ?? 0))
+        .ToArray();
+
+    var types = Enum.GetValues<MealBuilder.Models.MealType>().ToArray();
+
+    var top3ByType = types.ToDictionary(
+        t => t.ToString(),
+        t => Model.Slots
+            .Where(s => s.MealType == t && s.MealPlanRecipeId != null)
+            .GroupBy(s => new { s.RecipeId, s.RecipeTitle })
+            .OrderByDescending(g => g.Count())
+            .Take(3)
+            .Select(g => new { title = g.Key.RecipeTitle ?? "—", count = g.Count() })
+            .ToList()
+    );
+}
 <h2>@ViewData["Title"]</h2>
 <hr />
 
 <div class="mb-3">
     <a class="btn btn-outline-secondary" asp-action="Index">← Back to list</a>
+    @{
+        var botUserName = Config["Telegram:BotUserName"] ?? "YourBotUserName";
+        var planId = Model.MealPlanId;
+    }
+    <a class="btn btn-outline-primary"
+       href="https://t.me/@(botUserName)?start=plan_@(planId)"
+       target="_blank" rel="noopener">
+        Export to Telegram
+    </a>
+    <button type="button"
+            class="btn btn-outline-primary"
+            data-bs-toggle="modal"
+            data-bs-target="#statsModal">
+        <i class="bi bi-bar-chart"></i> Statistics
+    </button>
+
 </div>
 
 <table class="table table-bordered align-middle">
@@ -116,6 +154,70 @@
     </tbody>
 </table>
 
+<div class="modal fade" id="statsModal" tabindex="-1" aria-labelledby="statsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 id="statsModalLabel" class="modal-title">Statistics — @Model.Name</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="mb-3">Calories per day</h6>
+                <canvas id="chartCaloriesPerDay" height="150"></canvas>
+                <hr />
+                <h6 class="mb-3">Top-3 dishes per meal type</h6>
+                @foreach (var t in types)
+                {
+                    var key = t.ToString();
+                    <div class="mb-4">
+                        <strong>@t</strong>
+                        <canvas id="chartTop3_@key" height="100"></canvas>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script>
+        const labelsDays = @Html.Raw(JsonSerializer.Serialize(labelsDays));
+        const dataKcalPerDay = @Html.Raw(JsonSerializer.Serialize(caloriesPerDay));
+        const top3ByType = @Html.Raw(JsonSerializer.Serialize(top3ByType));
+
+        const statsModalEl = document.getElementById('statsModal');
+        let chartsDrawn = false;
+
+        statsModalEl?.addEventListener('shown.bs.modal', () => {
+          if (chartsDrawn) return;
+          chartsDrawn = true;
+
+          new Chart(document.getElementById('chartCaloriesPerDay'), {
+            type: 'bar',
+            data: { labels: labelsDays, datasets: [{ data: dataKcalPerDay, borderWidth: 1 }] },
+            options: { plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }
+          });
+
+          Object.entries(top3ByType).forEach(([typeKey, items]) => {
+            const el = document.getElementById(`chartTop3_${typeKey}`);
+            if (!el) return;
+            const labels = items.map(i => i.title);
+            const data = items.map(i => i.count);
+            new Chart(el, {
+              type: 'bar',
+              data: { labels, datasets:[{ data, borderWidth: 1 }] },
+              options: {
+                indexAxis:'y',
+                plugins:{ legend:{ display:false } },
+                scales:{ x:{ beginAtZero:true, ticks:{ precision:0, stepSize:1 } } }
+              }
+            });
+          });
+        });
+    </script>
 }

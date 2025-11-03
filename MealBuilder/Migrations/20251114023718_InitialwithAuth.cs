@@ -3,14 +3,31 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace MealBuilder.Infrastructure
+namespace MealBuilder.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    public partial class InitialwithAuth : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateTable(
+                name: "AppUsers",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Provider = table.Column<string>(type: "text", nullable: false),
+                    ProviderUserId = table.Column<string>(type: "text", nullable: false),
+                    Email = table.Column<string>(type: "text", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: true),
+                    IsPremium = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AppUsers", x => x.Id);
+                });
+
             migrationBuilder.CreateTable(
                 name: "Ingredients",
                 columns: table => new
@@ -30,11 +47,18 @@ namespace MealBuilder.Infrastructure
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false)
+                    Name = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    AppUserId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_MealPlans", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_MealPlans_AppUsers_AppUserId",
+                        column: x => x.AppUserId,
+                        principalTable: "AppUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -45,13 +69,20 @@ namespace MealBuilder.Infrastructure
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Title = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
                     Description = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
-                    Category = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: true),
+                    Category = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     Calories = table.Column<int>(type: "integer", nullable: true),
-                    ImageUrl = table.Column<string>(type: "text", nullable: true)
+                    ImageUrl = table.Column<string>(type: "text", nullable: true),
+                    AppUserId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Recipes", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Recipes_AppUsers_AppUserId",
+                        column: x => x.AppUserId,
+                        principalTable: "AppUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -112,12 +143,7 @@ namespace MealBuilder.Infrastructure
             migrationBuilder.CreateIndex(
                 name: "IX_MealPlanRecipes_MealPlanId_Day_MealType",
                 table: "MealPlanRecipes",
-                columns: new[] { "MealPlanId", "Day", "MealType" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_MealPlanRecipes_MealPlanId_Day_MealType_RecipeId",
-                table: "MealPlanRecipes",
-                columns: new[] { "MealPlanId", "Day", "MealType", "RecipeId" },
+                columns: new[] { "MealPlanId", "Day", "MealType" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -126,9 +152,19 @@ namespace MealBuilder.Infrastructure
                 column: "RecipeId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_MealPlans_AppUserId",
+                table: "MealPlans",
+                column: "AppUserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_RecipeIngredients_IngredientId",
                 table: "RecipeIngredients",
                 column: "IngredientId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Recipes_AppUserId",
+                table: "Recipes",
+                column: "AppUserId");
         }
 
         /// <inheritdoc />
@@ -148,6 +184,9 @@ namespace MealBuilder.Infrastructure
 
             migrationBuilder.DropTable(
                 name: "Recipes");
+
+            migrationBuilder.DropTable(
+                name: "AppUsers");
         }
     }
 }

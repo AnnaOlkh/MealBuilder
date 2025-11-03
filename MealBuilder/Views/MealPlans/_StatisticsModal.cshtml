@@ -1,0 +1,55 @@
+﻿@model MealBuilder.ViewModels.MealPlanDetailsVm
+
+@{
+    var days = Enum.GetValues(typeof(DayOfWeek)).Cast<DayOfWeek>().ToArray();
+    var types = Enum.GetValues<MealBuilder.Models.MealType>().ToArray();
+
+    var caloriesPerDay = days
+        .Select(d => Model.Slots
+            .Where(s => s.Day == d && s.MealPlanRecipeId != null)
+            .Sum(s => s.Calories ?? 0))
+        .ToArray();
+
+    var labelsDays = days.Select(d => d.ToString()).ToArray();
+
+    var top3ByType = types.ToDictionary(
+        t => t.ToString(),
+        t => Model.Slots
+            .Where(s => s.MealType == t && s.MealPlanRecipeId != null)
+            .GroupBy(s => new { s.RecipeId, s.RecipeTitle })
+            .OrderByDescending(g => g.Count())
+            .Take(3)
+            .Select(g => new { title = g.Key.RecipeTitle, count = g.Count() })
+            .ToList()
+    );
+}
+
+<div class="modal fade" id="statsModal" tabindex="-1" aria-labelledby="statsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 id="statsModalLabel" class="modal-title">Statistics — @Model.Name</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 class="mb-3">Calories per day</h6>
+                <canvas id="chartCaloriesPerDay" height="150"></canvas>
+
+                <hr />
+
+                <h6 class="mb-3">Top-3 dishes per meal type</h6>
+                @foreach (var t in types)
+                {
+                    var key = t.ToString();
+                    <div class="mb-4">
+                        <strong>@t</strong>
+                        <canvas id="chartTop3_@key" height="100"></canvas>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>

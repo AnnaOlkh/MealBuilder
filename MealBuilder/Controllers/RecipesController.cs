@@ -2,29 +2,32 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
 using MealBuilder.Infrastructure;
 using MealBuilder.Models;
 using MealBuilder.ViewModels;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
 
 namespace MealBuilder.Controllers
 {
-    public class RecipesController : Controller
+    [Authorize]
+    public class RecipesController : AppControllerBase
     {
-        private readonly MealBuilderDbContext _context;
-
         public RecipesController(MealBuilderDbContext context)
+            : base(context)
         {
-            _context = context;
         }
+
         public async Task<IActionResult> ManageIngredients(int id)
         {
+            var userId = await GetCurrentAppUserIdAsync();
+
             var recipe = await _context.Recipes
                 .Include(r => r.RecipeIngredients)
                     .ThenInclude(ri => ri.Ingredient)
-                .FirstOrDefaultAsync(r => r.Id == id);
+                .FirstOrDefaultAsync(r => r.Id == id && r.AppUserId == userId);
 
             if (recipe == null) return NotFound();
 
@@ -51,17 +54,25 @@ namespace MealBuilder.Controllers
 
             return View(vm);
         }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddIngredient([Bind(Prefix = "Add")] RecipeIngredientsVm.AddDto model)
         {
+            var userId = await GetCurrentAppUserIdAsync();
+
             if (!ModelState.IsValid)
             {
                 return await ManageIngredients(model.RecipeId);
             }
 
-            var existsRecipe = await _context.Recipes.AnyAsync(r => r.Id == model.RecipeId);
-            var existsIngredient = await _context.Ingredients.AnyAsync(i => i.Id == model.IngredientId);
+            // рецепт має належати поточному юзеру
+            var existsRecipe = await _context.Recipes
+                .AnyAsync(r => r.Id == model.RecipeId && r.AppUserId == userId);
+
+            var existsIngredient = await _context.Ingredients
+                .AnyAsync(i => i.Id == model.IngredientId);
+
             if (!existsRecipe || !existsIngredient)
             {
                 ModelState.AddModelError(string.Empty, "Recipe або Ingredient not found.");
@@ -92,40 +103,50 @@ namespace MealBuilder.Controllers
             return RedirectToAction(nameof(ManageIngredients), new { id = model.RecipeId });
         }
 
-        // POST: /Recipes/RemoveIngredient
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveIngredient(int recipeId, int ingredientId)
         {
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var ownsRecipe = await _context.Recipes
+                .AnyAsync(r => r.Id == recipeId && r.AppUserId == userId);
+
+            if (!ownsRecipe) return NotFound();
+
             var link = await _context.RecipeIngredients.FindAsync(recipeId, ingredientId);
             if (link != null)
             {
                 _context.RecipeIngredients.Remove(link);
                 await _context.SaveChangesAsync();
             }
+
             return RedirectToAction(nameof(ManageIngredients), new { id = recipeId });
         }
 
         // GET: Recipes
         public async Task<IActionResult> Index()
         {
-            return View(await _context.Recipes.ToListAsync());
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var recipes = await _context.Recipes
+                .Where(r => r.AppUserId == userId)
+                .ToListAsync();
+
+            return View(recipes);
         }
 
         // GET: Recipes/Details/5
         public async Task<IActionResult> Details(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (id == null) return NotFound();
+
+            var userId = await GetCurrentAppUserIdAsync();
 
             var recipe = await _context.Recipes
-                .FirstOrDefaultAsync(m => m.Id == id);
-            if (recipe == null)
-            {
-                return NotFound();
-            }
+                .FirstOrDefaultAsync(m => m.Id == id && m.AppUserId == userId);
+
+            if (recipe == null) return NotFound();
 
             return View(recipe);
         }
@@ -137,86 +158,90 @@ namespace MealBuilder.Controllers
         }
 
         // POST: Recipes/Create
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Id,Title,Description,Category,Calories,ImageUrl")] Recipe recipe)
         {
-            if (ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
-                _context.Add(recipe);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
+                return View(recipe);
             }
-            return View(recipe);
+
+            var userId = await GetCurrentAppUserIdAsync();
+            recipe.AppUserId = userId;
+
+            _context.Add(recipe);
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index));
         }
 
         // GET: Recipes/Edit/5
         public async Task<IActionResult> Edit(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (id == null) return NotFound();
 
-            var recipe = await _context.Recipes.FindAsync(id);
-            if (recipe == null)
-            {
-                return NotFound();
-            }
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var recipe = await _context.Recipes
+                .FirstOrDefaultAsync(r => r.Id == id && r.AppUserId == userId);
+
+            if (recipe == null) return NotFound();
+
             return View(recipe);
         }
 
         // POST: Recipes/Edit/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(int id, [Bind("Id,Title,Description,Category,Calories,ImageUrl")] Recipe recipe)
         {
-            if (id != recipe.Id)
+            if (id != recipe.Id) return NotFound();
+
+            if (!ModelState.IsValid)
             {
-                return NotFound();
+                return View(recipe);
             }
 
-            if (ModelState.IsValid)
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var existing = await _context.Recipes
+                .FirstOrDefaultAsync(r => r.Id == id && r.AppUserId == userId);
+
+            if (existing == null) return NotFound();
+
+            existing.Title = recipe.Title;
+            existing.Description = recipe.Description;
+            existing.Category = recipe.Category;
+            existing.Calories = recipe.Calories;
+            existing.ImageUrl = recipe.ImageUrl;
+
+            try
             {
-                try
-                {
-                    _context.Update(recipe);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!RecipeExists(recipe.Id))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
+                await _context.SaveChangesAsync();
             }
-            return View(recipe);
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!await _context.Recipes.AnyAsync(e => e.Id == id && e.AppUserId == userId))
+                {
+                    return NotFound();
+                }
+                throw;
+            }
+
+            return RedirectToAction(nameof(Index));
         }
 
         // GET: Recipes/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (id == null) return NotFound();
+
+            var userId = await GetCurrentAppUserIdAsync();
 
             var recipe = await _context.Recipes
-                .FirstOrDefaultAsync(m => m.Id == id);
-            if (recipe == null)
-            {
-                return NotFound();
-            }
+                .FirstOrDefaultAsync(m => m.Id == id && m.AppUserId == userId);
+
+            if (recipe == null) return NotFound();
 
             return View(recipe);
         }
@@ -226,26 +251,28 @@ namespace MealBuilder.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var recipe = await _context.Recipes.FindAsync(id);
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var recipe = await _context.Recipes
+                .FirstOrDefaultAsync(r => r.Id == id && r.AppUserId == userId);
+
             if (recipe != null)
             {
                 _context.Recipes.Remove(recipe);
+                await _context.SaveChangesAsync();
             }
 
-            await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));
         }
 
-        private bool RecipeExists(int id)
-        {
-            return _context.Recipes.Any(e => e.Id == id);
-        }
         public async Task<IActionResult> Landing(int id)
         {
+            var userId = await GetCurrentAppUserIdAsync();
+
             var recipe = await _context.Recipes
                 .Include(r => r.RecipeIngredients)
                     .ThenInclude(ri => ri.Ingredient)
-                .FirstOrDefaultAsync(r => r.Id == id);
+                .FirstOrDefaultAsync(r => r.Id == id && r.AppUserId == userId);
 
             if (recipe == null) return NotFound();
 
@@ -267,8 +294,10 @@ namespace MealBuilder.Controllers
                     })
                     .ToList()
             };
+
             vm.UsedInMealPlansCount = await _context.MealPlanRecipes
                 .CountAsync(m => m.RecipeId == recipe.Id);
+
             return View(vm);
         }
     }

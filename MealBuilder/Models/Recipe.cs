@@ -27,6 +27,8 @@ public class Recipe
 
     [Url, Display(Name = "Image URL")]
     public string? ImageUrl { get; set; }
+    public int AppUserId { get; set; }
+    public AppUser AppUser { get; set; } = default!;
 
     public ICollection<RecipeIngredient> RecipeIngredients { get; set; } = new List<RecipeIngredient>();
     public ICollection<MealPlanRecipe> MealPlanRecipes { get; set; } = new List<MealPlanRecipe>();

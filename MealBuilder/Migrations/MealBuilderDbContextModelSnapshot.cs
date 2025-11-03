@@ -8,7 +8,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace MealBuilder.Infrastructure
+namespace MealBuilder.Migrations
 {
     [DbContext(typeof(MealBuilderDbContext))]
     partial class MealBuilderDbContextModelSnapshot : ModelSnapshot
@@ -21,6 +21,37 @@ namespace MealBuilder.Infrastructure
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("MealBuilder.Models.AppUser", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsPremium")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProviderUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AppUsers");
+                });
 
             modelBuilder.Entity("MealBuilder.Models.Ingredient", b =>
                 {
@@ -48,12 +79,17 @@ namespace MealBuilder.Infrastructure
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
 
                     b.ToTable("MealPlans");
                 });
@@ -100,6 +136,9 @@ namespace MealBuilder.Infrastructure
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("AppUserId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("Calories")
                         .HasColumnType("integer");
 
@@ -121,6 +160,8 @@ namespace MealBuilder.Infrastructure
                         .HasColumnType("character varying(120)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
 
                     b.ToTable("Recipes");
                 });
@@ -146,6 +187,17 @@ namespace MealBuilder.Infrastructure
                     b.ToTable("RecipeIngredients");
                 });
 
+            modelBuilder.Entity("MealBuilder.Models.MealPlan", b =>
+                {
+                    b.HasOne("MealBuilder.Models.AppUser", "AppUser")
+                        .WithMany("MealPlans")
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+                });
+
             modelBuilder.Entity("MealBuilder.Models.MealPlanRecipe", b =>
                 {
                     b.HasOne("MealBuilder.Models.MealPlan", "MealPlan")
@@ -165,6 +217,17 @@ namespace MealBuilder.Infrastructure
                     b.Navigation("Recipe");
                 });
 
+            modelBuilder.Entity("MealBuilder.Models.Recipe", b =>
+                {
+                    b.HasOne("MealBuilder.Models.AppUser", "AppUser")
+                        .WithMany("Recipes")
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+                });
+
             modelBuilder.Entity("MealBuilder.Models.RecipeIngredient", b =>
                 {
                     b.HasOne("MealBuilder.Models.Ingredient", "Ingredient")
@@ -182,6 +245,13 @@ namespace MealBuilder.Infrastructure
                     b.Navigation("Ingredient");
 
                     b.Navigation("Recipe");
+                });
+
+            modelBuilder.Entity("MealBuilder.Models.AppUser", b =>
+                {
+                    b.Navigation("MealPlans");
+
+                    b.Navigation("Recipes");
                 });
 
             modelBuilder.Entity("MealBuilder.Models.Ingredient", b =>

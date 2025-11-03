@@ -2,38 +2,46 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
 using MealBuilder.Infrastructure;
 using MealBuilder.Models;
 using MealBuilder.ViewModels;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
 using static MealBuilder.ViewModels.RecipeIngredientsVm;
 
 namespace MealBuilder.Controllers
 {
-    public class MealPlansController : Controller
+    [Authorize]
+    public class MealPlansController : AppControllerBase
     {
-        private readonly MealBuilderDbContext _context;
-
         public MealPlansController(MealBuilderDbContext context)
+            : base(context)
         {
-            _context = context;
         }
 
         // GET: MealPlans
         public async Task<IActionResult> Index()
         {
-            return View(await _context.MealPlans.ToListAsync());
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var plans = await _context.MealPlans
+                .Where(p => p.AppUserId == userId)
+                .ToListAsync();
+
+            return View(plans);
         }
 
         // GET: MealPlans/Details/5
         public async Task<IActionResult> Details(int id)
         {
+            var userId = await GetCurrentAppUserIdAsync();
+
             var plan = await _context.MealPlans
                 .Include(p => p.MealPlanRecipes)
                     .ThenInclude(mpr => mpr.Recipe)
-                .FirstOrDefaultAsync(p => p.Id == id);
+                .FirstOrDefaultAsync(p => p.Id == id && p.AppUserId == userId);
 
             if (plan == null) return NotFound();
 
@@ -54,7 +62,8 @@ namespace MealBuilder.Controllers
                         MealPlanRecipeId = existing?.Id,
                         RecipeId = existing?.RecipeId,
                         RecipeTitle = existing?.Recipe?.Title,
-                        Notes = existing?.Notes
+                        Notes = existing?.Notes,
+                        Calories = existing?.Recipe?.Calories ?? 0
                     });
                 }
             }
@@ -67,7 +76,9 @@ namespace MealBuilder.Controllers
                     .OrderBy(s => s.Day)
                     .ThenBy(s => s.MealType)
                     .ToList(),
+                // показуємо тільки рецепти поточного юзера
                 RecipeOptions = await _context.Recipes
+                    .Where(r => r.AppUserId == userId)
                     .OrderBy(r => r.Title)
                     .Select(r => new SelectListItem { Value = r.Id.ToString(), Text = r.Title })
                     .ToListAsync(),
@@ -81,11 +92,17 @@ namespace MealBuilder.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddItem([Bind(Prefix = "Edit")] MealPlanDetailsVm.EditSlotDto dto)
         {
+            var userId = await GetCurrentAppUserIdAsync();
+
             if (!ModelState.IsValid)
                 return await Details(dto.MealPlanId);
 
-            var planExists = await _context.MealPlans.AnyAsync(p => p.Id == dto.MealPlanId);
-            var recipeExists = await _context.Recipes.AnyAsync(r => r.Id == dto.RecipeId);
+            var planExists = await _context.MealPlans
+                .AnyAsync(p => p.Id == dto.MealPlanId && p.AppUserId == userId);
+
+            var recipeExists = await _context.Recipes
+                .AnyAsync(r => r.Id == dto.RecipeId && r.AppUserId == userId);
+
             if (!planExists || !recipeExists)
             {
                 ModelState.AddModelError(string.Empty, "MealPlan або Recipe не знайдено.");
@@ -118,18 +135,25 @@ namespace MealBuilder.Controllers
             await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Details), new { id = dto.MealPlanId });
         }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> UpdateNotes(UpdateNotesDto dto)
         {
-            // базова перевірка
+            var userId = await GetCurrentAppUserIdAsync();
+
             if (dto.MealPlanRecipeId <= 0)
             {
                 ModelState.AddModelError(string.Empty, "Wrong identifier.");
                 return await Details(dto.MealPlanId);
             }
 
-            var link = await _context.MealPlanRecipes.FindAsync(dto.MealPlanRecipeId);
+            var link = await _context.MealPlanRecipes
+                .Include(l => l.MealPlan)
+                .FirstOrDefaultAsync(l => l.Id == dto.MealPlanRecipeId
+                                       && l.MealPlanId == dto.MealPlanId
+                                       && l.MealPlan.AppUserId == userId);
+
             if (link is null)
             {
                 ModelState.AddModelError(string.Empty, "Slot not found.");
@@ -138,24 +162,32 @@ namespace MealBuilder.Controllers
 
             link.Notes = string.IsNullOrWhiteSpace(dto.Notes)
                 ? null
-                : (dto.Notes!.Length > 300 ? dto.Notes.Substring(0, 300) : dto.Notes);
+                : (dto.Notes!.Length > 300 ? dto.Notes[..300] : dto.Notes);
 
             _context.MealPlanRecipes.Update(link);
             await _context.SaveChangesAsync();
 
             return RedirectToAction(nameof(Details), new { id = dto.MealPlanId });
         }
-        // POST: /MealPlans/RemoveItem
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveItem(int mealPlanRecipeId, int mealPlanId)
         {
-            var link = await _context.MealPlanRecipes.FindAsync(mealPlanRecipeId);
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var link = await _context.MealPlanRecipes
+                .Include(l => l.MealPlan)
+                .FirstOrDefaultAsync(l => l.Id == mealPlanRecipeId
+                                       && l.MealPlanId == mealPlanId
+                                       && l.MealPlan.AppUserId == userId);
+
             if (link != null)
             {
                 _context.MealPlanRecipes.Remove(link);
                 await _context.SaveChangesAsync();
             }
+
             return RedirectToAction(nameof(Details), new { id = mealPlanId });
         }
 
@@ -166,86 +198,81 @@ namespace MealBuilder.Controllers
         }
 
         // POST: MealPlans/Create
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Id,Name")] MealPlan mealPlan)
         {
-            if (ModelState.IsValid)
-            {
-                _context.Add(mealPlan);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
-            }
-            return View(mealPlan);
+            if (!ModelState.IsValid)
+                return View(mealPlan);
+
+            var userId = await GetCurrentAppUserIdAsync();
+            mealPlan.AppUserId = userId;
+
+            _context.Add(mealPlan);
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index));
         }
 
         // GET: MealPlans/Edit/5
         public async Task<IActionResult> Edit(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (id == null) return NotFound();
 
-            var mealPlan = await _context.MealPlans.FindAsync(id);
-            if (mealPlan == null)
-            {
-                return NotFound();
-            }
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var mealPlan = await _context.MealPlans
+                .FirstOrDefaultAsync(p => p.Id == id && p.AppUserId == userId);
+
+            if (mealPlan == null) return NotFound();
+
             return View(mealPlan);
         }
 
         // POST: MealPlans/Edit/5
-        // To protect from overposting attacks, enable the specific properties you want to bind to.
-        // For more details, see http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(int id, [Bind("Id,Name")] MealPlan mealPlan)
         {
-            if (id != mealPlan.Id)
+            if (id != mealPlan.Id) return NotFound();
+
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var existing = await _context.MealPlans
+                .FirstOrDefaultAsync(p => p.Id == id && p.AppUserId == userId);
+
+            if (existing == null) return NotFound();
+
+            if (!ModelState.IsValid)
+                return View(mealPlan);
+
+            existing.Name = mealPlan.Name;
+
+            try
             {
-                return NotFound();
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!await _context.MealPlans.AnyAsync(e => e.Id == id && e.AppUserId == userId))
+                    return NotFound();
+
+                throw;
             }
 
-            if (ModelState.IsValid)
-            {
-                try
-                {
-                    _context.Update(mealPlan);
-                    await _context.SaveChangesAsync();
-                }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!MealPlanExists(mealPlan.Id))
-                    {
-                        return NotFound();
-                    }
-                    else
-                    {
-                        throw;
-                    }
-                }
-                return RedirectToAction(nameof(Index));
-            }
-            return View(mealPlan);
+            return RedirectToAction(nameof(Index));
         }
 
         // GET: MealPlans/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
+            if (id == null) return NotFound();
+
+            var userId = await GetCurrentAppUserIdAsync();
 
             var mealPlan = await _context.MealPlans
-                .FirstOrDefaultAsync(m => m.Id == id);
-            if (mealPlan == null)
-            {
-                return NotFound();
-            }
+                .FirstOrDefaultAsync(m => m.Id == id && m.AppUserId == userId);
+
+            if (mealPlan == null) return NotFound();
 
             return View(mealPlan);
         }
@@ -255,19 +282,23 @@ namespace MealBuilder.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var mealPlan = await _context.MealPlans.FindAsync(id);
+            var userId = await GetCurrentAppUserIdAsync();
+
+            var mealPlan = await _context.MealPlans
+                .FirstOrDefaultAsync(p => p.Id == id && p.AppUserId == userId);
+
             if (mealPlan != null)
             {
                 _context.MealPlans.Remove(mealPlan);
+                await _context.SaveChangesAsync();
             }
 
-            await _context.SaveChangesAsync();
             return RedirectToAction(nameof(Index));
         }
 
-        private bool MealPlanExists(int id)
+        private Task<bool> MealPlanExists(int id, int userId)
         {
-            return _context.MealPlans.Any(e => e.Id == id);
+            return _context.MealPlans.AnyAsync(e => e.Id == id && e.AppUserId == userId);
         }
     }
 }

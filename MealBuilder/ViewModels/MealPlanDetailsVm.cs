@@ -22,6 +22,8 @@ public sealed class MealPlanDetailsVm
         public int? RecipeId { get; set; }
         public string? RecipeTitle { get; set; }
         public string? Notes { get; set; }
+        public int? Calories { get; set; }
+
     }
 
     public sealed class EditSlotDto

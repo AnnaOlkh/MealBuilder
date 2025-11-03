@@ -2,6 +2,11 @@ using MealBuilder.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using MealBuilder.Seeding;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using Telegram.Bot;
+using MealBuilder.Models;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +28,74 @@ builder.Services.AddSwaggerGen(o =>
 {
     o.SwaggerDoc("v1", new() { Title = "MealBuilder API", Version = "v1" });
 });
+
+builder.Services.AddSingleton<ITelegramBotClient>(_ =>
+{
+    var token = builder.Configuration["Telegram:BotToken"]
+               ?? throw new InvalidOperationException("Telegram bot token missing");
+    return new TelegramBotClient(token);
+});
+builder.Services.AddHostedService<TelegramBotHostedService>();
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
+    })
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/auth/login";
+        options.LogoutPath = "/auth/logout";
+    })
+    .AddGoogle(options =>
+    {
+        options.ClientId = builder.Configuration["Authentication:Google:ClientId"]!;
+        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]!;
+
+        options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+
+        options.Events.OnCreatingTicket = async context =>
+        {
+            using var scope = context.HttpContext.RequestServices
+                .GetRequiredService<IServiceScopeFactory>()
+                .CreateScope();
+
+            var db = scope.ServiceProvider.GetRequiredService<MealBuilderDbContext>();
+
+            var provider = "Google";
+            var providerUserId = context.Principal!.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var email = context.Principal!.FindFirstValue(ClaimTypes.Email)!;
+            var name = context.Principal!.FindFirstValue(ClaimTypes.Name);
+
+            var user = await db.AppUsers
+                .FirstOrDefaultAsync(u => u.Provider == provider && u.ProviderUserId == providerUserId);
+
+            if (user is null)
+            {
+                user = await db.AppUsers
+                    .FirstOrDefaultAsync(u => u.Provider == provider && u.Email == email);
+            }
+            if (user is null)
+            {
+                user = new AppUser
+                {
+                    Provider = provider,
+                    ProviderUserId = providerUserId,
+                    Email = email,
+                    Name = name
+                };
+                db.AppUsers.Add(user);
+            }
+            else
+            {
+                user.ProviderUserId = providerUserId;
+                user.Email = email;
+                user.Name = name;
+            }
+
+            await db.SaveChangesAsync();
+        };
+    });
 
 var app = builder.Build();
 
@@ -52,6 +125,7 @@ app.UseSwaggerUI(o =>
     o.RoutePrefix = "swagger";
 });
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(

@@ -12,6 +12,7 @@ public class MealBuilderDbContext : DbContext
     public DbSet<MealPlan> MealPlans { get; set; }
     public DbSet<RecipeIngredient> RecipeIngredients { get; set; }
     public DbSet<MealPlanRecipe> MealPlanRecipes { get; set; }
+    public DbSet<AppUser> AppUsers { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
